@@ -1,0 +1,93 @@
+C51 COMPILER V9.60.0.0   EXEMPLO                                                           03/11/2021 21:03:45 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE EXEMPLO
+OBJECT MODULE PLACED IN .\Objects\exemplo.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.exe exemplo.c OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\e
+                    -xemplo.lst) TABS(2) OBJECT(.\Objects\exemplo.obj)
+
+line level    source
+
+   1          #include <reg51.h>
+   2          
+   3          #define FrClk 12000000
+   4          #define FreqTimer0_emHz 100
+   5          #define VALOR_TH0 ((65536 - (FrClk / (12 * FreqTimer0_emHz))) >>8)
+   6          #define VALOR_TL0 ((65536 - (FrClk / (12 * FreqTimer0_emHz))) & 0xFF)
+   7          
+   8          
+   9          
+  10          unsigned int contador,contador2;
+  11          
+  12          void timer0_inicializa() 
+  13            {
+  14   1        TR0 = 0;              // Desliga Timer0
+  15   1        TMOD = (TMOD & 0xF0) | 0x01;  // Timer 0 programado como timer de 16 bits
+  16   1        TH0 = VALOR_TH0;  // Programa contagem do Timer0
+  17   1        TL0 = VALOR_TL0;
+  18   1        ET0 = 1;      // Habilita interrupcao do timer 0
+  19   1        TR0 = 1;      // Habilita contagem do timer 0
+  20   1        }
+  21          
+  22          void timer0_int (void) interrupt 1 using 2
+  23            {
+  24   1        TR0 = 0;              // Desliga Timer0
+  25   1        TL0 += VALOR_TL0;
+  26   1        TH0 += VALOR_TH0 + (unsigned char) CY;   // Programa contagem do Timer0
+  27   1        TR0 = 1;      // Habilita contagem do timer 0
+  28   1      
+  29   1        if (contador != 0)
+  30   1           contador--;
+  31   1        }
+  32          
+  33          void main()
+  34            {
+  35   1        timer0_inicializa();
+  36   1        EA=1; //Habilita o tratamento de interrupções
+  37   1      
+  38   1        while (1)
+  39   1            {
+  40   2            contador = 300;
+  41   2            do{
+  42   3              contador2 = contador;
+  43   3            }while(contador2!=0);
+  44   2            
+  45   2            //while(contador != 0); // Fica em loop enquanto "contador != 0"
+  46   2            //o problema era uma condição de corrida, que tava acontecendo devido a uma concorrencia 
+  47   2            //entre a interrupção e o loop da main.
+  48   2            //a linha 'while(contador != 0)' é traduzido para dois comandos em assembly, isso por que o 8052 é um p
+             -rocessador de 8 bits.
+  49   2            //o primeiro comando é pra mover a parte baixa do contador para o registrador A.
+  50   2            //o segundo comando é para fazer um ou logico entre A e a parte alta de contador.
+  51   2            //o bug ocorria quando a interrupção ocorria entre a execução do primeiro comando e o segundo. e o valo
+             -r de contador era 0x0100
+  52   2            //executando o primeiro comando A receberia 00(parte baixa de contador)
+C51 COMPILER V9.60.0.0   EXEMPLO                                                           03/11/2021 21:03:45 PAGE 2   
+
+  53   2            //dentro da interrupção, contador seria decrementado para 0x00FF
+  54   2            //no retorno da função o ou logico seria feito entre A e a parte alta de contador ou seja (0x00 ou 0x00
+             -) o que daria 0.
+  55   2            //apesar de que o valor real para contador seja 0x00FF.
+  56   2            
+  57   2            if (contador == 0) // Testa se contador é igual a zero.
+  58   2               P0 = 0;
+  59   2            else
+  60   2               P0 = 0xFF; // ESTA INSTRUÇÃO NUNCA DEVERIA SER EXECUTADA!
+  61   2            }
+  62   1        }
+  63            
+  64          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    113    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      4    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
