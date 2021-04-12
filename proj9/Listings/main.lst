@@ -1,0 +1,221 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              04/11/2021 22:44:00 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.exe main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REG51F.H>
+   2          
+   3          //para o timer 1
+   4          #define FR_CLOCK 12000000
+   5          #define BOUDRATE 1200
+   6          #define AUX (FR_CLOCK/(12*BOUDRATE))
+   7          #define TH1_INICIAL (-(AUX*2/32)+256) //equivalente a 204
+   8          
+   9          //para o timer 0
+  10          #define FR_TIMER 100
+  11          #define CORRECAO 7
+  12          #define TL0_INICIAL (65536 - (FR_CLOCK/(12*FR_TIMER))+CORRECAO) & 0xFF;
+  13          #define TH0_INICIAL (65536 - (FR_CLOCK/(12*FR_TIMER))+CORRECAO) >> 8;
+  14          
+  15          bit is_TI_busy = 0;
+  16          bit one_second_flag = 0;
+  17          
+  18          
+  19          void inicializa_timer1(){
+  20   1        TR1 = 0; //desligando a contagem 
+  21   1        // GATE | C/T | M1 | M0 | GATE | C/T | M1 | M0
+  22   1        // GATE define se havera intervenção externa GATE = 0 define que não existirá intervenção
+  23   1        // C/T define se vamos contar os pulsos de clock ou pulsos da entrada T0, C/T = 0 contamos os pulsos de c
+             -lock
+  24   1        // TR0 = 0 suspende a contagem, TR0 = 1 retoma a contagem.
+  25   1        // M1 e M0 controlam o modo de operação
+  26   1        TMOD = (TMOD & 0x0F) | 0x20; // Não modifico os 4 ultimos bits que equivalem ao timer0 e modifico os 4 pr
+             -imeiros que configuram o timer 1 
+  27   1        TH1 = (int) TH1_INICIAL; // inicializando o TH1, ele vai inicializar o TL0 toda vez que der overflow
+  28   1        //Não vai ser necessario colocar o ET1 para 1 pois, não precisaremos da interrupção do timer1
+  29   1        TR1 = 1; //religando a contagem
+  30   1      }
+  31          
+  32          void serial_int() interrupt 4
+  33          {
+  34   1        if(TI){
+  35   2          TI=0; //preciso zerar o TI pois isso não seria feito automaticamente, isso é necessario para evitar que 
+             -a interrupção seja chamada indevidamente
+  36   2          is_TI_busy = 0;
+  37   2        }
+  38   1        if(RI){
+  39   2          RI = 0; //preciso zerar o RI pois isso não seria feito automaticamente, isso é necessario para evitar qu
+             -e a interrupção seja chamada indevidamente
+  40   2        }
+  41   1      }
+  42          
+  43          void inicializa_serial(){
+  44   1        SCON = (SCON & 0x0F)| 0x50; //setando o SM0|SM1|SM2|REN para 0101, para a serial operar no modo 1.
+  45   1        PCON |= 0x80; //setando o smod para 1 para conseguir um boudrate mais proximo de 1200bps
+  46   1      }
+  47          
+  48          void inicializa_timer0(){
+  49   1        TR0 = 0; //desligando a contagem 
+  50   1        // GATE | C/T | M1 | M0 | GATE | C/T | M1 | M0
+C51 COMPILER V9.60.0.0   MAIN                                                              04/11/2021 22:44:00 PAGE 2   
+
+  51   1        // GATE define se havera intervenção externa GATE = 0 define que não existirá intervenção
+  52   1        // C/T define se vamos contar os pulsos de clock ou pulsos da entrada T0, C/T = 0 contamos os pulsos de c
+             -lock
+  53   1        // TR0 = 0 suspende a contagem, TR0 = 1 retoma a contagem.
+  54   1        // M1 e M0 controlam o modo de operação
+  55   1        
+  56   1        TMOD = (TMOD & 0xF0) | 0x01; // Não modifico os 4 primeiros bits pois eles condizem ao timer 1, para colo
+             -car 
+  57   1        TH0 = TH0_INICIAL; // inicializando o THO
+  58   1        TL0 = TL0_INICIAL; // inicializando o TL0
+  59   1        ET0 = 1; //necessario para que o timer0 gere interrupções.
+  60   1        TR0 = 1; //religando a contagem
+  61   1      }
+  62          
+  63          void timer0_int (void) interrupt 1 using 2
+  64          {
+  65   1        static int count1 = 0;
+  66   1        TR0 = 0; // Desliga Timer0
+  67   1        TL0 += TL0_INICIAL; // Faz recarga da contagem do Timer0
+  68   1        TH0 += TH0_INICIAL + (unsigned char) CY;
+*** WARNING C275 IN LINE 68 OF main.c: expression with possibly no effect
+  69   1        TR0 = 1; // Habilita contagem do timer 0
+  70   1        
+  71   1        //a cada 10ms executo o trecho a cima, ele defasa o relogio em 0.000007s
+  72   1          
+  73   1        count1++;
+  74   1        if(count1 >= 100){ //10ms * 100 = 1segundo
+  75   2          count1 = 0;
+  76   2          one_second_flag = 1;
+  77   2        }
+  78   1      
+  79   1      
+  80   1      }
+  81          
+  82          char countSetBits(char n){
+  83   1        char count = 0;
+  84   1        while(n!=0){
+  85   2          count += n&1;
+  86   2          n = n>>1;
+  87   2        }
+  88   1        
+  89   1        return count;
+  90   1      }
+  91          
+  92          char decrementCounter(int counter){
+  93   1        if(counter>0){
+  94   2          counter--;
+  95   2        }
+  96   1        return counter;
+  97   1      } 
+  98          
+  99          void stateMachine(){
+ 100   1        static char counterCamera1 = 0;
+ 101   1        static char counterCamera2 = 0;
+ 102   1        static char counterCamera3 = 0;
+ 103   1        static char counterCamera4 = 0;
+ 104   1        static char camerasIndex = 0;
+ 105   1        char numeroDeCamerasAtivadas = 0;
+ 106   1        
+ 107   1        if(one_second_flag){
+ 108   2          counterCamera1 = decrementCounter(counterCamera1);
+ 109   2          counterCamera2 = decrementCounter(counterCamera2);
+C51 COMPILER V9.60.0.0   MAIN                                                              04/11/2021 22:44:00 PAGE 3   
+
+ 110   2          counterCamera3 = decrementCounter(counterCamera3);
+ 111   2          counterCamera4 = decrementCounter(counterCamera4);
+ 112   2          one_second_flag = 0;
+ 113   2        }
+ 114   1        numeroDeCamerasAtivadas = countSetBits(P0 & 0x0f);
+ 115   1        if(numeroDeCamerasAtivadas == 1){
+ 116   2          if(P0 & 0x01){
+ 117   3            counterCamera1 = 5;
+ 118   3          }else if(P0 & 0x02){
+ 119   3            counterCamera2 = 5;
+ 120   3          }else if(P0 & 0x04){
+ 121   3            counterCamera3 = 5;
+ 122   3          }else if(P0 & 0x08){
+ 123   3            counterCamera4 = 5;
+ 124   3          }
+ 125   2        }else if(numeroDeCamerasAtivadas > 0){
+ 126   2          if(!(counterCamera1 | counterCamera2 | counterCamera3 | counterCamera4)){
+ 127   3            camerasIndex++;
+ 128   3            if(camerasIndex > 3){
+ 129   4              camerasIndex = 0;
+ 130   4            }
+ 131   3            
+ 132   3            switch(camerasIndex){
+ 133   4              case 0:
+ 134   4                if(P0 & 0x01){
+ 135   5                  counterCamera1 = 3;
+ 136   5                }
+ 137   4              break;
+ 138   4              case 1:
+ 139   4                if(P0 & 0x02){
+ 140   5                  counterCamera2 = 3;
+ 141   5                }
+ 142   4              break;
+ 143   4              case 2:
+ 144   4                if(P0 & 0x04){
+ 145   5                  counterCamera3 = 3;
+ 146   5                } 
+ 147   4              break;
+ 148   4              case 3:
+ 149   4                if(P0 & 0x08){
+ 150   5                  counterCamera4 = 3;
+ 151   5                }
+ 152   4              break;
+ 153   4            }
+ 154   3          }
+ 155   2        }
+ 156   1            
+ 157   1        if(!is_TI_busy){
+ 158   2          is_TI_busy = 1;
+ 159   2          if(counterCamera1){
+ 160   3            SBUF = '1';
+ 161   3          }else if(counterCamera2){
+ 162   3            SBUF = '2';
+ 163   3          }else if(counterCamera3){
+ 164   3            SBUF = '3';
+ 165   3          }else if(counterCamera4){
+ 166   3            SBUF = '4';
+ 167   3          }else{
+ 168   3            SBUF = 'p';
+ 169   3          }
+ 170   2        }
+ 171   1      }
+C51 COMPILER V9.60.0.0   MAIN                                                              04/11/2021 22:44:00 PAGE 4   
+
+ 172          
+ 173          void main(void){
+ 174   1        inicializa_timer1(); //configurando o timer1 para o modo 2
+ 175   1        inicializa_timer0();
+ 176   1        inicializa_serial(); //configurando o serial para o modo 1
+ 177   1      
+ 178   1        EA = 1; // Habilita o tratamento de interrupções
+ 179   1        ES = 1; // Habilita o tratamento da interrupção do serial quando TI e/ou RI é 1 
+ 180   1        
+ 181   1        while(1){
+ 182   2          stateMachine();
+ 183   2        }
+ 184   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    411    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      7    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)
