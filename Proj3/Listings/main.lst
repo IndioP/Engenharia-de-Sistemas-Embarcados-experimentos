@@ -1,0 +1,150 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              02/11/2021 22:01:12 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.exe main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REG51F.H>
+   2          
+   3          #define FR_CLOCK 12000000
+   4          #define FR_TIMER 100
+   5          #define CORRECAO 7
+   6          #define TL0_INICIAL (65536 - (FR_CLOCK/(12*FR_TIMER))+CORRECAO) & 0xFF;
+   7          #define TH0_INICIAL (65536 - (FR_CLOCK/(12*FR_TIMER))+CORRECAO) >> 8;
+   8          
+   9          bit flag_counting_state_machine1 = 0;
+  10          bit flag_counting_state_machine2 = 0;
+  11          
+  12          sbit bit0deP2 = P2^0;
+  13          sbit bit1deP2 = P2^1;
+  14          
+  15          void inicializa_timer0(){
+  16   1        TR0 = 0; //desligando a contagem 
+  17   1        // GATE | C/T | M1 | M0 | GATE | C/T | M1 | M0
+  18   1        // GATE define se havera intervenção externa GATE = 0 define que não existirá intervenção
+  19   1        // C/T define se vamos contar os pulsos de clock ou pulsos da entrada T0, C/T = 0 contamos os pulsos de c
+             -lock
+  20   1        // TR0 = 0 suspende a contagem, TR0 = 1 retoma a contagem.
+  21   1        // M1 e M0 controlam o modo de operação
+  22   1        
+  23   1        TMOD = (TMOD & 0xF0) | 0x01; // Não modifico os 4 primeiros bits pois eles condizem ao timer 1, para colo
+             -car 
+  24   1        TH0 = TH0_INICIAL; // inicializando o THO
+  25   1        TL0 = TL0_INICIAL; // inicializando o TL0
+  26   1        ET0 = 1; //necessario para que o timer0 gere interrupções.
+  27   1        TR0 = 1; //religando a contagem
+  28   1      }
+  29          
+  30          void timer0_int (void) interrupt 1 using 2
+  31          {
+  32   1        static unsigned char count1 = 0;
+  33   1        static unsigned char count2 = 0;
+  34   1        TR0 = 0; // Desliga Timer0
+  35   1        TL0 += TL0_INICIAL; // Faz recarga da contagem do Timer0
+  36   1        TH0 += TH0_INICIAL + (unsigned char) CY;
+*** WARNING C275 IN LINE 36 OF main.c: expression with possibly no effect
+  37   1        TR0 = 1; // Habilita contagem do timer 0
+  38   1        
+  39   1        //a cada 10ms executo o trecho a cima, ele defasa o relogio em 0.000007s
+  40   1        
+  41   1        
+  42   1        if(flag_counting_state_machine1){
+  43   2          count1++;
+  44   2          if(count1 >= 100){
+  45   3            count1 = 0;
+  46   3            flag_counting_state_machine1 = 0;
+  47   3          }
+  48   2        }
+  49   1        
+  50   1        if(flag_counting_state_machine2){
+  51   2          count2++;
+C51 COMPILER V9.60.0.0   MAIN                                                              02/11/2021 22:01:12 PAGE 2   
+
+  52   2          if(count2 >= 100){
+  53   3            count2 = 0;
+  54   3            flag_counting_state_machine2 = 0;
+  55   3          }
+  56   2        } 
+  57   1      
+  58   1      }
+  59          
+  60          void SMLowerBits(){
+  61   1        static unsigned char state = 2;
+  62   1        switch(state){
+  63   2          case 0:
+  64   2            if(bit0deP2){
+  65   3              P1 = (P1 & 0xf0) | (P0 & 0x0f);
+  66   3              state = 1;
+  67   3              flag_counting_state_machine1 = 1; //ESSA FLAG VAI LIBERAR A CONTAGEM
+  68   3            }
+  69   2          break;
+  70   2          case 1: //A MAQUINA DE ESTADOS VAI FICAR PRESA NESSE ESTADO POR 1 SEGUNDO ATÉ QUE A INTERRUPÇÃO A LIBERE
+  71   2            if(!flag_counting_state_machine1){
+  72   3              P1 = (P1 & 0xf0);
+  73   3              state = 2;
+  74   3            }
+  75   2          break;
+  76   2          case 2: //ESTADO NECESSARIO, PARA ESPERAR QUE O BIT VÁ PARA 0 PARA PERMITIR TRANSIÇÃO DE 0 PARA 1
+  77   2            if(!bit0deP2){
+  78   3              state = 0;
+  79   3            }
+  80   2          break;  
+  81   2        }
+  82   1      }
+  83          
+  84          
+  85          void SMHigherBits(){
+  86   1        static unsigned char state = 2;
+  87   1        switch(state){
+  88   2          case 0:
+  89   2            if(bit1deP2){
+  90   3              P1 = (P0 & 0xf0) | (P1 & 0x0f);
+  91   3              state = 1;
+  92   3              flag_counting_state_machine2 = 1; //ESSA FLAG VAI LIBERAR A CONTAGEM DE 1 SEGUNDO
+  93   3            }
+  94   2          break;
+  95   2          case 1://A MAQUINA DE ESTADOS VAI FICAR PRESA NESSE ESTADO POR 1 SEGUNDO ATÉ QUE A INTERRUPÇÃO A LIBERE
+  96   2            if(!flag_counting_state_machine2){
+  97   3              P1 = (P1 & 0x0f);
+  98   3              state = 2;
+  99   3            }
+ 100   2          break;
+ 101   2          case 2: //ESTADO NECESSARIO, PARA ESPERAR QUE O BIT VÁ PARA 0 PARA PERMITIR TRANSIÇÃO DE 0 PARA 1
+ 102   2            if(!bit1deP2){
+ 103   3              state = 0;
+ 104   3            }
+ 105   2          break;
+ 106   2        }
+ 107   1      }
+ 108          
+ 109          int main(void){
+ 110   1        inicializa_timer0();
+ 111   1        EA = 1; // Habilita o tratamento de interrupções
+ 112   1        
+ 113   1        while(1){
+C51 COMPILER V9.60.0.0   MAIN                                                              02/11/2021 22:01:12 PAGE 3   
+
+ 114   2          SMLowerBits();
+ 115   2          SMHigherBits();
+ 116   2        }
+ 117   1      
+ 118   1      }
+ 119          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    201    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      4    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)
