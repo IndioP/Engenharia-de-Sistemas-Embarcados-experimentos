@@ -1,0 +1,97 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              02/23/2021 22:06:50 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.exe main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REG51F.H>
+   2          
+   3          #define FR_CLOCK 12000000
+   4          #define BOUDRATE 1200
+   5          #define AUX (12000000/(12*1200))
+   6          #define TH1_INICIAL (-(AUX*2/32)+256) //equivalente a 204
+   7          
+   8          bit new_byte_arrived = 0; //variavel auxiliar para comunicação da interrupção com a main()
+   9          
+  10          void inicializa_timer1(){
+  11   1      
+  12   1        TR1 = 0; //desligando a contagem 
+  13   1      
+  14   1        // GATE | C/T | M1 | M0 | GATE | C/T | M1 | M0
+  15   1      
+  16   1        // GATE define se havera intervenção externa GATE = 0 define que não existirá intervenção
+  17   1      
+  18   1        // C/T define se vamos contar os pulsos de clock ou pulsos da entrada T0, C/T = 0 contamos os pulsos de c
+             -lock
+  19   1      
+  20   1        // TR0 = 0 suspende a contagem, TR0 = 1 retoma a contagem.
+  21   1      
+  22   1        // M1 e M0 controlam o modo de operação
+  23   1      
+  24   1        TMOD = (TMOD & 0x0F) | 0x20; // Não modifico os 4 ultimos bits que equivalem ao timer0 e modifico os 4 pr
+             -imeiros que configuram o timer 1 
+  25   1      
+  26   1        TH1 = (int) TH1_INICIAL; // inicializando o TH1, ele vai inicializar o TL0 toda vez que der overflow
+  27   1      
+  28   1        //Não vai ser necessario colocar o ET1 para 1 pois, não precisaremos da interrupção do timer1
+  29   1      
+  30   1        TR1 = 1; //religando a contagem
+  31   1      
+  32   1      }
+  33          
+  34          void serial_int() interrupt 4
+  35          {
+  36   1        if(TI){
+  37   2          TI=0; //preciso zerar o TI pois isso não seria feito automaticamente, isso é necessario para evitar que 
+             -a interrupção seja chamada indevidamente
+  38   2        }
+  39   1        if(RI){
+  40   2          new_byte_arrived = 1; 
+  41   2          RI = 0; //preciso zerar o RI pois isso não seria feito automaticamente, isso é necessario para evitar qu
+             -e a interrupção seja chamada indevidamente
+  42   2        }
+  43   1      }
+  44          
+  45          void inicializa_serial(){
+  46   1        SCON = (SCON & 0x0F)| 0x50; //setando o SM0|SM1|SM2|REN para 0101, para a serial operar no modo 1.
+  47   1        PCON |= 0x80; //setando o smod para 1 para conseguir um boudrate mais proximo de 1200bps
+  48   1      }
+  49          
+  50          void main(void){
+C51 COMPILER V9.60.0.0   MAIN                                                              02/23/2021 22:06:50 PAGE 2   
+
+  51   1      
+  52   1        inicializa_timer1(); //configurando o timer1 para o modo 2
+  53   1        inicializa_serial(); //configurando o serial para o modo 1
+  54   1      
+  55   1        EA = 1; // Habilita o tratamento de interrupções
+  56   1        ES = 1; // Habilita o tratamento da interrupção do serial quando TI e/ou RI é 1 
+  57   1        while(1){
+  58   2          if(new_byte_arrived){
+  59   3            char aux = SBUF; //pego o byte recebido
+  60   3            aux++; //somo para transformar no proximo caractere
+  61   3            SBUF = aux; //envio ela pelo barramento serial
+  62   3            new_byte_arrived = 0;
+  63   3          }
+  64   2          
+  65   2        }
+  66   1      }
+  67          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     66    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       1
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
